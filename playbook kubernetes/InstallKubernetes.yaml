@@ -1,0 +1,64 @@
+---
+- name: Install Kubernetes  
+  hosts: all
+  become: true
+
+  tasks:
+
+    - name: inestallation br_netfilter and overlay modules
+      modprobe:
+        name: ['br_netfilter', 'overlay']
+        update_cache: yes
+        state: latest
+
+    - name: read the contents of the sysctl.conf
+      command: cat /etc/sysctl.conf
+      register: sysctl_file
+    - name: cheng value ipv4 in the file sysctl.conf
+      replace:
+        path: /etc/sysctl.conf
+        regexp: "#net.ipv4.ip_forward = 1"
+        replace: "net.ipv4.ip_forward = 1"
+        backup: yes
+      when: "'#net.ipv4.ip_forward = 1' in sysctl_file.stdout"
+    - name: add net.ipv4.ip_forward line if it dosen't exist
+      lineinfile:
+        path: /etc/sysctl.conf
+        line: 'net.ipv4.ip_forward = 1'
+      when: "'#net.ipv4.ip_forward = 1' not in sysctl_file.stdout"    
+
+    - name: Apply sysctl settings
+      sysctl:
+        name: "*"
+        state: present
+
+    - name: Download Kubernetes apt key
+      get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+        dest: /tmp/kubernetes-apt-keyring.gpg
+
+    - name: Import Kubernetes apt key
+      copy:
+        src: /tmp/kubernetes-apt-keyring.gpg
+        dest: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+
+    - name: Add Kubernetes apt repository
+      apt_repository:
+        repo: 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /'
+        state: present
+        filename: 'kubernetes'
+        update_cache: yes
+
+    - name: Install Kubernetes components
+      apt:
+        name: ['kubelet', 'kubeadm', 'kubectl']
+        state: present
+        update_cache: yes
+      dependencies: Add Kubernetes apt repository
+        
+    - name: Install Kubernetes components
+      apt:
+        name: ['kubelet', 'kubeadm', 'kubectl']
+        state: held
+      dependencies: Install Kubernetes components
